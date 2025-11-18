@@ -1,32 +1,104 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <link rel="stylesheet" href="styles.css" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PakePlus App</title>
-        <script type="module" src="/main.js" defer></script>
-    </head>
+<html lang="zh-CN">
 
-    <body>
-        <main class="container">
-            <h1>Welcome to PakePlus</h1>
-            <form class="row" id="greet-form">
-                <input id="inputValue" placeholder="Enter a something..." />
-            </form>
-            <div class="resultBox">
-                <span>result: </span>
-                <span id="result"></span>
+<head>
+    <meta charset="UTF-8">
+    <title>智能点名系统</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 文件解析库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+    <!-- 独立样式文件 -->
+    <link rel="stylesheet" href="css/index.css">
+</head>
+
+<body class="page-bg">
+
+    <!-- 左上角Logo -->
+    <div class="logo-container">
+        <img src="img/SchoolLogo.png" alt="School Logo" class="school-logo">
+    </div>
+
+    <!-- 右上角功能区 -->
+    <div class="top-right-menu">
+        <button id="selectClassBtn" class="menu-btn">🎓 选择班级</button>
+        <button id="viewListBtn" class="menu-btn">📋 查看名单</button>
+        <button id="addNameBtn" class="menu-btn">➕ 添加姓名</button>
+        <button id="toggleCalledSidebar" class="menu-btn">📘 已点名单</button>
+        <button id="closeBtn" class="menu-btn">✖ 关闭</button>
+    </div>
+
+    <h1 class="title">课堂问答点名系统</h1>
+
+    <div id="nameDisplay" class="name-display">
+        <span class="placeholder-text">请导入名单</span>
+    </div>
+
+    <button id="startButton" class="start-btn">▶ 开始点名</button>
+
+    <!-- 右下角帮助按钮 -->
+    <button id="helpBtn" class="help-btn" title="帮助">?</button>
+
+    <!-- 帮助抽屉 -->
+    <div id="helpDrawer" class="help-drawer">
+        <h2 class="help-title">📖 使用说明</h2>
+        <div class="help-content">
+            <div class="help-section">
+                <h3>1️⃣ 导入名单</h3>
+                <p>点击 "选择班级" 按钮，选择导入方式：</p>
+                <ul>
+                    <li><strong>导入自定义名单</strong>：导入单个班级的学生名单，如社团名单等</li>
+                    <li><strong>导入学校总名单</strong>：导入整个学校的班级和学生名单，系统会自动分班，名单文件中只要包含 “班级” 和 “姓名” 两列即可，班级推荐格式为 "XX年级-（X）班"</li>
+                </ul>
             </div>
-            <div class="invokeBox">
-                <button id="openUrl">open_url_browser</button>
-                <button id="openUrlNew">open_url_new</button>
-                <button id="runCommand">run_command</button>
-                <button id="downloadFile">download_file</button>
-                <button id="getExeDir">get_exe_dir</button>
-                <button id="getEnvVar">get_env_var</button>
-                <button id="findPort">find_port</button>
+            <div class="help-section">
+                <h3>2️⃣ 重命名班级</h3>
+                <p>导入自定义名单后，点击下拉框旁的 "✏️ 修改" 按钮可重命名该班级。</p>
             </div>
-        </main>
-    </body>
+            <div class="help-section">
+                <h3>3️⃣ 开始点名</h3>
+                <p>点击 "▶ 开始点名" 按钮开始随机抽取学生名字，再次点击停止。</p>
+            </div>
+            <div class="help-section">
+                <h3>4️⃣ 查看名单</h3>
+                <p>点击 "📋 查看名单" 查看当前班级的所有学生，点击学生姓名后的 "❌" 可删除该学生。</p>
+            </div>
+            <div class="help-section">
+                <h3>5️⃣ 添加学生</h3>
+                <p>点击 "➕ 添加姓名" 可手动添加单个学生到当前班级。</p>
+            </div>
+            <div class="help-section">
+                <h3>6️⃣ 已点名单</h3>
+                <p>点击 "📘 已点名单" 查看已被点到过的学生记录，该记录中的学生不会再被重复点到，点击学生姓名后的 "❌" 可删除该学生记录，也可以清空所有点名记录。</p>
+            </div>
+            <div class="help-tips">
+                <strong>💡 提示</strong>
+                <p>• 支持导入 Excel 和 Word 文件</p>
+                <p>• 文件中只需存在 “班级” 和 “姓名” 两列即可，其他无关项会被自动忽略</p>
+                <p>• 自动检测学生姓名和班级分类</p>
+                <p>• 所有数据保存在浏览器本地，不会丢失</p>
+            </div>
+            <div class="help-author">
+                <p>Author：</p>
+                <img src="img/signature.png" alt="signature" class="author-signature">
+                <p>Made for Roll Call Pro System<br/> Version 0.1.0</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧统一抽屉 -->
+    <div id="rightDrawer" class="right-sidebar">
+        <h2 id="drawerTitle" class="called-title">标题</h2>
+        <div id="drawerContent" class="called-list-container">
+            <ul id="drawerList" class="called-list"></ul>
+        </div>
+        <div id="drawerActions" class="mt-4 flex justify-end gap-2"></div>
+    </div>
+
+    <script src="js/index.js"></script>
+</body>
 </html>

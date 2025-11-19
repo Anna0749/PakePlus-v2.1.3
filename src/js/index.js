@@ -931,19 +931,6 @@ calledNames = savedCalled;
 updateCountDisplay();
 updateCalledSidebarButton();
 
-window.addEventListener("DOMContentLoaded", () => {
-  const closeBtn = document.getElementById("closeBtn");
-  if (!closeBtn) return;
-
-  closeBtn.addEventListener("click", async () => {
-    const tauriWinApi = window.__TAURI__?.window;
-    if (tauriWinApi?.getCurrent) {
-      await tauriWinApi.getCurrent().close();
-    } else {
-      alert("请手动关闭窗口（浏览器模式下无法自动关闭）");
-    }
-  });
-});
 // ========== 11. 帮助功能 ==========
 const helpBtn = document.getElementById("helpBtn");
 const helpDrawer = document.getElementById("helpDrawer");

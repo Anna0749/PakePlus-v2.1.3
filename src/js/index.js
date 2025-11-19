@@ -16,21 +16,31 @@ let savedClassLists = JSON.parse(
 let maskMode = "default"; // "default" | "classSelect"
 window.__confirmClassSelection = null; // 供遮罩统一回调使用
 
+
 // ========== 2. DOM 元素引用 ==========
+// 主容器元素
 const nameDisplay = document.getElementById("nameDisplay");
 const startButton = document.getElementById("startButton");
 const selectClassBtn = document.getElementById("selectClassBtn");
 
+// 菜单按钮
 const viewListBtn = document.getElementById("viewListBtn");
 const addNameBtn = document.getElementById("addNameBtn");
 const toggleBtn = document.getElementById("toggleCalledSidebar");
 
+// 抽屉元素
 const rightDrawer = document.getElementById("rightDrawer");
 const drawerTitle = document.getElementById("drawerTitle");
 const drawerList = document.getElementById("drawerList");
 const drawerActions = document.getElementById("drawerActions");
 
 // ========== 3. 工具函数 - 数据转换 ==========
+
+/**
+ * 将中文数字转换成阿拉伯数字（支持一到二十）
+ * @param {string} ch - 中文或阿拉伯数字字符
+ * @returns {number|null} 转换后的数字或 null
+ */
 function chineseToNumber(ch) {
   if (!ch) return null;
   const map = {
@@ -62,12 +72,17 @@ function chineseToNumber(ch) {
   if (m && map[m[0]] !== undefined) return map[m[0]];
   return null;
 }
-
+/**
+ * 规范化班级名称格式，将各种格式统一为 "XX年级-（X）班"
+ * @param {string} raw - 原始班级名称
+ * @returns {string} 规范化后的班级名称或原名
+ */
 function normalizeClassName(raw) {
   if (!raw) return "自定义班级";
   raw = raw.toString().trim();
   if (!raw) return "自定义班级";
 
+  // 格式1: "XX年级...X班" 的标准格式
   const m = raw.match(
     /(\d+|[一二三四五六七八九十]+)\s*年级.*?([（(]?(\d+|[一二三四五六七八九十]+)[）)]?)?\s*班/
   );
@@ -77,6 +92,7 @@ function normalizeClassName(raw) {
     return `${g}年级-（${cnum}）班`;
   }
 
+  // 格式2: "高一A班" 或 "高一（1）班" 等
   const m2 = raw.match(
     /(高|初)?\s*([一二三四五六七八九十]|\d+)\s*.*?[（(]?(\d+|[一二三四五六七八九十]+)?[）)]?\s*班/
   );
@@ -86,19 +102,28 @@ function normalizeClassName(raw) {
     return `${g}年级-（${cnum}）班`;
   }
 
+  // 格式3: 单个数字
   const solo = raw.match(/^(\d+|[一二三四五六七八九十]+)$/);
   if (solo) {
     const g = chineseToNumber(solo[1]) || solo[1];
     return `${g}年级-（1）班`;
   }
 
+  // 其他情况直接返回原文本
   return raw;
 }
 
+/**
+ * 从班级标签中解析年级和班级号，用于排序
+ * @param {string} label - 班级标签
+ * @returns {object} { grade: number, cls: number } 解析结果
+ */
 function parseGradeClassFromLabel(label) {
   if (!label) return { grade: Infinity, cls: Infinity };
   const s = label.toString();
-  const m = s.match(
+
+  // 尝试匹配 'X年级...Y班' 格式 
+   const m = s.match(
     /(\d+|[一二三四五六七八九十]+)\s*年级[^\d零一二三四五六七八九十]*(\d+|[一二三四五六七八九十]+)?\s*班/
   );
   if (m) {
@@ -110,6 +135,7 @@ function parseGradeClassFromLabel(label) {
     return { grade: g, cls: c };
   }
 
+  // 尝试匹配 '高一（1）班' 或 '高一A班' 格式
   const m2 = s.match(
     /(?:高|初)?\s*([一二三四五六七八九十]|\d+)\D*?(?:（|\(|\[)?(\d+|[一二三四五六七八九十]+)?(?:）|\)|\])?\s*班/
   );
@@ -122,6 +148,7 @@ function parseGradeClassFromLabel(label) {
     return { grade: g, cls: c };
   }
 
+  // 直接从字符串中提取数字
   const nums = s.match(/(\d+)/g) || [];
   if (nums.length >= 2)
     return { grade: parseInt(nums[0], 10), cls: parseInt(nums[1], 10) };
@@ -130,13 +157,21 @@ function parseGradeClassFromLabel(label) {
   return { grade: Infinity, cls: Infinity };
 }
 
+/**
+ * 从 sheet json 中检测姓名列的 key
+ * @param {array} json - sheet 转换后的 JSON 数据
+ * @returns {string|null} 姓名列的键名
+ */
 function detectNameKey(json) {
   if (!json || json.length === 0) return null;
 
   const keys = Array.from(new Set(json.flatMap((r) => Object.keys(r || {}))));
+
+  // 优先匹配列名含 '姓名' 或 '名字'
   const headerKey = keys.find((k) => /姓名|名字/.test(k));
   if (headerKey) return headerKey;
 
+  // 基于样本值检测：常见姓名为 2-4 个汉字或英文名
   for (const k of keys) {
     let count = 0;
     for (let i = 0; i < Math.min(json.length, 10); i++) {
@@ -151,10 +186,16 @@ function detectNameKey(json) {
 }
 
 // ========== 4. 工具函数 - localStorage 保存 ==========
+/**
+ * 保存所有状态到 localStorage（向后兼容）
+ */
 function saveNamesToLocal() {
   saveAllStateToLocal();
 }
 
+/**
+ * 保存完整状态：名字、已点、班级列表等
+ */
 function saveAllStateToLocal() {
   localStorage.setItem("savedNames", JSON.stringify(names));
   localStorage.setItem("savedCalled", JSON.stringify(calledNames));
@@ -164,6 +205,11 @@ function saveAllStateToLocal() {
 }
 
 // ========== 5. 工具函数 - UI 更新 ==========
+/**
+ * 显示某个班级的前10名预览
+ * @param {string} classLabel - 班级标签
+ * @param {array} listOverride - 可选的名单覆盖
+ */
 function showPreviewForClass(classLabel, listOverride) {
   const previewDiv = document.getElementById("importPreview");
   if (!previewDiv) return;
@@ -176,6 +222,7 @@ function showPreviewForClass(classLabel, listOverride) {
   previewDiv.appendChild(title);
   const ol = document.createElement("ol");
   ol.style.paddingLeft = "20px";
+  ol.style.width = "90%";
   const slice = list.slice(0, 10);
   slice.forEach((n) => {
     const li = document.createElement("li");
@@ -186,22 +233,34 @@ function showPreviewForClass(classLabel, listOverride) {
   if (list.length > 10) {
     const more = document.createElement("div");
     more.style.marginTop = "6px";
-    more.style.fontSize = "0.9em";
+    more.style.paddingLeft = "35px";
+    more.style.fontSize = "0.6em";
     more.style.opacity = "0.85";
-    more.textContent = `... 共 ${list.length} 人，显示前 10 名`;
+    more.textContent = `... 共 ${list.length} 人，仅显示 10 人`;
     previewDiv.appendChild(more);
   }
 }
 
+/**
+ * 更新姓名区域显示
+ */
 function updateCountDisplay() {
   if (names.length === 0) {
     nameDisplay.innerHTML =
-      '<span class="text-3xl opacity-90">请导入名单</span>';
+      '<span class="text-3xl opacity-90">请选择班级</span>';
   } else {
-    nameDisplay.innerHTML = `<span class="text-3xl opacity-90">名单中共有 ${names.length} 人</span>`;
+    const count = calledNames.length;
+    if (count !== 0) {
+      nameDisplay.innerHTML = `<span class="text-3xl opacity-90" style="line-height: 1.8;">名单中共有： ${names.length} 人<br>已点：${count}人</span>`;
+    } else {
+      nameDisplay.innerHTML = `<span class="text-3xl opacity-90" style="line-height: 1.8;">名单中共有： ${names.length} 人</span>`;
+    }
   }
 }
 
+/**
+ * 刷新已点名单显示（如果抽屉打开）
+ */
 function renderCalledList() {
   if (
     rightDrawer.classList.contains("show") &&
@@ -211,12 +270,23 @@ function renderCalledList() {
   }
 }
 
+/**
+ * 更新"已点"按钮的文字
+ */
 function updateCalledSidebarButton() {
   const count = calledNames.length;
   toggleBtn.textContent = count > 0 ? `📘 已点：${count}人` : "📘 已点名单";
 }
 
 // ========== 6. 文件解析功能 ==========
+
+/**
+ * 解析 Excel/Word 文件并按班级拆分
+ * @param {File} file - 导入的文件
+ * @param {object} options - 选项（rawClass: 是否保留原始班级名）
+ * @returns {object} { names, classMap, classLabel, ... }
+ */
+// 解析文件并按班级拆分（返回 classMap）
 async function parseFileForNames(file, options = {}) {
   const rawClass = options.rawClass === true;
   const fileName = file.name.toLowerCase();
@@ -404,9 +474,13 @@ async function parseFileForNames(file, options = {}) {
 }
 
 // ========== 7. 点名功能 ==========
+/**
+ * 点名按钮事件处理
+ */
 startButton.addEventListener("click", () => {
   if (names.length === 0) {
-    alert("请先导入名单！");
+    // alert("请先导入名单！");
+    openClassDrawer();
     return;
   }
 
@@ -448,6 +522,9 @@ startButton.addEventListener("click", () => {
 });
 
 // ========== 8. 抽屉功能 ==========
+/**
+ * 创建遮罩
+ */
 const drawerMask = document.createElement("div");
 drawerMask.style.position = "fixed";
 drawerMask.style.top = "0";
@@ -459,6 +536,9 @@ drawerMask.style.zIndex = "60";
 drawerMask.style.display = "none";
 document.body.appendChild(drawerMask);
 
+/**
+ * 关闭抽屉
+ */
 function closeDrawer() {
   rightDrawer.classList.remove("show");
   drawerMask.style.display = "none";
@@ -479,6 +559,11 @@ drawerMask.addEventListener("click", (e) => {
   }
 });
 
+/**
+ * 打开抽屉（通用）
+ * @param {object} options - { title, type }
+ * type: 'calledList' | 'fullList' | 'addName'
+ */
 function openDrawer({ title, type }) {
   drawerTitle.textContent = title;
   drawerList.innerHTML = "";
@@ -488,6 +573,7 @@ function openDrawer({ title, type }) {
   maskMode = "default";
   window.__confirmClassSelection = null;
 
+  // ===== 已点名单 =====
   if (type === "calledList") {
     const frag = document.createDocumentFragment();
     calledNames.forEach((n, idx) => {
@@ -509,6 +595,14 @@ function openDrawer({ title, type }) {
         "ml-2 opacity-0 hover:opacity-100 transition-opacity text-red-400";
       delBtn.style.cursor = "pointer";
       delBtn.dataset.name = n;
+
+      li.addEventListener("mouseenter", () => {
+        delBtn.style.opacity = "1"; // 变亮
+      });
+      li.addEventListener("mouseleave", () => {
+        delBtn.style.opacity = "0"; // 回到默认
+      });
+
       li.appendChild(span);
       li.appendChild(delBtn);
       frag.appendChild(li);
@@ -539,7 +633,7 @@ function openDrawer({ title, type }) {
     };
 
     const clearBtn = document.createElement("button");
-    clearBtn.textContent = "🧹 清空名单";
+    clearBtn.textContent = "🧹 清空已点";
     clearBtn.style.width = "50%";
     clearBtn.className = "clear-called-btn";
     clearBtn.addEventListener("click", () => {
@@ -571,6 +665,14 @@ function openDrawer({ title, type }) {
         "ml-2 opacity-0 hover:opacity-100 transition-opacity text-red-400";
       delBtn.style.cursor = "pointer";
       delBtn.dataset.name = n;
+
+      li.addEventListener("mouseenter", () => {
+        delBtn.style.opacity = "1"; // 变亮
+      });
+      li.addEventListener("mouseleave", () => {
+        delBtn.style.opacity = "0"; // 回到默认
+      });
+
       li.appendChild(span);
       li.appendChild(delBtn);
       frag.appendChild(li);
@@ -609,7 +711,9 @@ function openDrawer({ title, type }) {
     closeBtn.style.cursor = "default";
     closeBtn.style.pointerEvents = "none";
     drawerActions.appendChild(closeBtn);
-  } else if (type === "addName") {
+  } 
+  // ===== 添加姓名 =====
+  else if (type === "addName") {
     const inputContainer = document.createElement("div");
     inputContainer.style.flex = "1";
     inputContainer.style.display = "flex";
@@ -660,6 +764,9 @@ function openDrawer({ title, type }) {
   rightDrawer.classList.add("show");
 }
 
+/**
+ * 按钮绑定：打开各类抽屉
+ */
 toggleBtn.addEventListener("click", () =>
   openDrawer({ title: "✅ 已点名单", type: "calledList" })
 );
@@ -671,6 +778,10 @@ addNameBtn.addEventListener("click", () =>
 );
 
 // ========== 9. 班级选择功能 ==========
+
+/**
+ * 打开班级选择抽屉
+ */
 function openClassDrawer() {
   drawerTitle.textContent = "🎓 选择班级";
   drawerList.innerHTML = "";
@@ -688,6 +799,7 @@ function openClassDrawer() {
   placeholder.selected = true;
   select.appendChild(placeholder);
 
+  // 下拉班级选项生成逻辑
   if (
     savedClasses.length === 1 &&
     savedClasses[0] === "自定义班级" &&
@@ -713,12 +825,14 @@ function openClassDrawer() {
   if (currentClass && savedClasses.includes(currentClass))
     select.value = currentClass;
 
+  // 创建下拉框和修改按钮的容器
   const selectContainer = document.createElement("div");
   selectContainer.style.display = "flex";
   selectContainer.style.gap = "8px";
   selectContainer.style.alignItems = "center";
   selectContainer.appendChild(select);
 
+  // 修改按钮（仅当只有一个选项时显示）
   const editBtn = document.createElement("button");
   editBtn.textContent = "✏️ 修改";
   editBtn.className = "menu-btn";
@@ -737,6 +851,7 @@ function openClassDrawer() {
         savedClasses = [newClass];
         currentClass = newClass;
 
+        // 更新下拉框选项
         for (let i = 0; i < select.options.length; i++) {
           if (select.options[i].value === currentName) {
             select.options[i].value = newClass;
@@ -772,6 +887,7 @@ function openClassDrawer() {
   previewDiv.style.overflow = "auto";
   drawerList.appendChild(previewDiv);
 
+  // ===== 导入按钮 =====
   const importClassBtn = document.createElement("button");
   importClassBtn.textContent = "📂 导入自定义名单";
   importClassBtn.style.fontSize = "0.9rem";
@@ -800,6 +916,7 @@ function openClassDrawer() {
     drawerFileInput.click();
   });
 
+  // ===== 文件导入处理 =====
   drawerFileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -822,15 +939,20 @@ function openClassDrawer() {
       savedClasses = ["自定义班级"];
       savedClassLists = { 自定义班级: allNames };
       currentClass = "自定义班级";
+      // 清空所有选项（除了 placeholder）
       Array.from(select.options).forEach((opt) => {
         if (opt.value) opt.remove();
       });
+      
+      // 添加 "自定义班级" 选项
       const customOpt = document.createElement("option");
       customOpt.value = "自定义班级";
       customOpt.textContent = "自定义班级";
       select.appendChild(customOpt);
       select.value = "自定义班级";
       showPreviewForClass("自定义班级");
+      
+      // 导入班级名单后，更新修改按钮的显示状态
       const classOptionCount = select.options.length - 1;
       editBtn.style.display = classOptionCount === 1 ? "inline-block" : "none";
     } else if (importMode === "school") {
@@ -874,15 +996,16 @@ function openClassDrawer() {
       });
       select.value = currentClass;
       showPreviewForClass(currentClass);
+      // 导入学校名单后，更新修改按钮的显示状态（应隐藏）
       const schoolOptionCount = select.options.length - 1;
       editBtn.style.display = schoolOptionCount === 1 ? "inline-block" : "none";
     }
     savedClasses = Array.from(new Set(savedClasses));
     saveAllStateToLocal();
-    updateCountDisplay();
     renderCalledList();
     drawerFileInput.value = "";
     calledNames = [];
+    updateCountDisplay();
     updateCalledSidebarButton();
   });
 
@@ -923,11 +1046,13 @@ function openClassDrawer() {
 selectClassBtn && selectClassBtn.addEventListener("click", openClassDrawer);
 
 // ========== 10. 初始化 ==========
+// 从 localStorage 加载数据
 const savedNames = JSON.parse(localStorage.getItem("savedNames") || "[]");
 const savedCalled = JSON.parse(localStorage.getItem("savedCalled") || "[]");
 names = savedNames;
 calledNames = savedCalled;
 
+// 初始化显示
 updateCountDisplay();
 updateCalledSidebarButton();
 
@@ -935,11 +1060,14 @@ updateCalledSidebarButton();
 const helpBtn = document.getElementById("helpBtn");
 const helpDrawer = document.getElementById("helpDrawer");
 
+// 帮助按钮点击事件
 helpBtn.addEventListener("click", () => {
   helpDrawer.classList.toggle("show");
 });
 
+// 点击帮助抽屉外的区域关闭它
 document.addEventListener("click", (e) => {
+  // 如果点击的不是帮助按钮也不是帮助抽屉，则关闭
   if (!helpBtn.contains(e.target) && !helpDrawer.contains(e.target)) {
     helpDrawer.classList.remove("show");
   }
